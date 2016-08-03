@@ -693,6 +693,14 @@ module Extensions
     end
   end
 
+  # Start a new page taking into account :page-layout:
+  #
+  def start_new_page_layout node, options = {}
+    options[:layout] ||= node.attr('page-layout')
+    options[:layout] &&= options[:layout].to_sym
+    start_new_page options
+  end
+
   # Grouping
 
   # Conditional group operation
@@ -752,13 +760,13 @@ module Extensions
   # Attempt to keep the objects generated in the block on the same page
   #
   # TODO short-circuit nested usage
-  def keep_together &block
+  def keep_together(node, &block)
     available_space = cursor
     total_height, _whole_pages, _remainder = dry_run(&block)
     # NOTE technically, if we're at the page top, we don't even need to do the
     # dry run, except several uses of this method rely on the calculated height
     if total_height > available_space && !at_page_top? && total_height <= effective_page_height
-      start_new_page
+      start_new_page node
       started_new_page = true
     else
       started_new_page = false

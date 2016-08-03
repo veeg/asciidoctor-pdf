@@ -143,7 +143,7 @@ class Converter < ::Prawn::Document
     layout_title_page doc
 
     # NOTE a new page will already be started if the cover image is a PDF
-    start_new_page unless page_is_empty?
+    start_new_page_layout doc unless page_is_empty?
 
     toc_start_page_num = page_number
     num_toc_levels = (doc.attr 'toclevels', 2).to_i
@@ -154,7 +154,7 @@ class Converter < ::Prawn::Document
       end
       # NOTE reserve pages for the toc
       toc_page_nums.each do
-        start_new_page
+        start_new_page_layout doc
       end
     end
 
@@ -307,7 +307,7 @@ class Converter < ::Prawn::Document
           start_new_chapter sect
         # FIXME smarter calculation here!!
         elsif cursor < (height_of title) + @theme.heading_margin_top + @theme.heading_margin_bottom + @theme.base_line_height_length * 1.5
-          start_new_page
+          start_new_page_layout sect
         end
       end
       # QUESTION should we store page_start & destination in internal map?
@@ -419,7 +419,7 @@ class Converter < ::Prawn::Document
     #shift_bottom = icons ? ((shift_base * 2) / 3.0) : shift_base
     shift_top = shift_base / 3.0
     shift_bottom = (shift_base * 2) / 3.0
-    keep_together do |box_height = nil|
+    keep_together(node) do |box_height = nil|
       #theme_font :admonition do
         # FIXME this is a fudge calculation for the icon width
         label_width = icons ? (bounds.width / 12.0) : (width_of label)
@@ -466,7 +466,7 @@ class Converter < ::Prawn::Document
   def convert_example node
     add_dest_for_block node if node.id
     theme_margin :block, :top
-    keep_together do |box_height = nil|
+    keep_together(node) do |box_height = nil|
       caption_height = node.title? ? (layout_caption node) : 0
       if box_height
         float do
@@ -506,7 +506,7 @@ class Converter < ::Prawn::Document
     add_dest_for_block node if node.id
     border_width = @theme.blockquote_border_width
     theme_margin :block, :top
-    keep_together do |box_height = nil|
+    keep_together(node) do |box_height = nil|
       start_cursor = cursor
       pad_box @theme.blockquote_padding do
         theme_font :blockquote do
@@ -541,7 +541,7 @@ class Converter < ::Prawn::Document
   def convert_sidebar node
     add_dest_for_block node if node.id
     theme_margin :block, :top
-    keep_together do |box_height = nil|
+    keep_together(node) do |box_height = nil|
       if box_height
         float do
           bounding_box [0, cursor], width: bounds.width, height: box_height do
@@ -586,7 +586,7 @@ class Converter < ::Prawn::Document
     line_metrics = calc_line_metrics @theme.base_line_height
     node.items.each_with_index do |item, idx|
       # FIXME extract to an ensure_space (or similar) method; simplify
-      start_new_page if cursor < (line_metrics.height + line_metrics.leading + line_metrics.padding_top)
+      start_new_page_layout node if cursor < (line_metrics.height + line_metrics.leading + line_metrics.padding_top)
       convert_colist_item item
     end
     @list_numbers.pop
@@ -624,7 +624,7 @@ class Converter < ::Prawn::Document
       terms = [*terms]
       # NOTE don't orphan the terms, allow for at least one line of content
       # FIXME extract ensure_space (or similar) method
-      start_new_page if cursor < @theme.base_line_height_length * (terms.size + 1)
+      start_new_page_layout node if cursor < @theme.base_line_height_length * (terms.size + 1)
       terms.each do |term|
         layout_prose term.text, style: @theme.description_list_term_font_style.to_sym, margin_top: 0, margin_bottom: @theme.description_list_term_spacing, align: :left
       end
@@ -705,7 +705,7 @@ class Converter < ::Prawn::Document
     indent @theme.outline_list_indent do
       node.items.each do |item|
         # FIXME extract to an ensure_space (or similar) method; simplify
-        start_new_page if cursor < (line_metrics.height + line_metrics.leading + line_metrics.padding_top)
+        start_new_page_layout node if cursor < (line_metrics.height + line_metrics.leading + line_metrics.padding_top)
         convert_outline_list_item item, item.complex?
       end
     end
@@ -835,7 +835,7 @@ class Converter < ::Prawn::Document
           # TODO shrink image to fit on a single page if height exceeds page height
           rendered_h = svg_size.output_height
           # TODO layout SVG without using keep_together (since we know the dimensions already); always render caption
-          keep_together do |box_height = nil|
+          keep_together(node) do |box_height = nil|
             svg_obj.instance_variable_set :@prawn, self
             svg_obj.draw
             if box_height && (link = node.attr 'link')
@@ -867,7 +867,7 @@ class Converter < ::Prawn::Document
           caption_height = node.title? ?
               (@theme.caption_margin_inside + @theme.caption_margin_outside + @theme.base_line_height_length) : 0
           if rendered_h > (available_height = cursor - caption_height)
-            start_new_page unless at_page_top?
+            start_new_page_layout node unless at_page_top?
             # NOTE shrink image so it fits on a single page if height exceeds page height
             if rendered_h > (available_height = cursor - caption_height)
               rendered_w = (rendered_w * available_height) / rendered_h
@@ -987,7 +987,7 @@ class Converter < ::Prawn::Document
       adjusted_font_size = nil
     end
 
-    keep_together do |box_height = nil|
+    keep_together(node) do |box_height = nil|
       caption_height = node.title? ? (layout_caption node) : 0
       theme_font :code do
         if box_height
@@ -1000,7 +1000,7 @@ class Converter < ::Prawn::Document
             remaining_height = box_height - caption_height
             i = 0
             while remaining_height > 0
-              start_new_page if (new_page_started = i > 0)
+              start_new_page_layout node if (new_page_started = i > 0)
               fill_height = [remaining_height, cursor].min
               bounding_box [0, cursor], width: bounds.width, height: fill_height do
                 theme_fill_and_stroke_bounds :code
@@ -1361,7 +1361,7 @@ class Converter < ::Prawn::Document
 
   # NOTE to insert sequential page breaks, you must put {nbsp} between page breaks
   def convert_page_break node
-    start_new_page unless at_page_top?
+    start_new_page_layout node unless at_page_top?
   end
 
   def convert_inline_anchor node
@@ -1555,7 +1555,7 @@ class Converter < ::Prawn::Document
       @page_bg_color = bg_color
     end
     # NOTE a new page will already be started if the cover image is a PDF
-    start_new_page unless page_is_empty?
+    start_new_page_layout doc unless page_is_empty?
     @page_bg_image = prev_bg_image if bg_image
     @page_bg_color = prev_bg_color if bg_color
 
@@ -1666,7 +1666,7 @@ class Converter < ::Prawn::Document
   # NOTE can't alias to start_new_page since methods have different arity
   # NOTE only called if not at page top
   def start_new_chapter section
-    start_new_page
+    start_new_page_layout section
   end
 
   def layout_chapter_title node, title, opts = {}
